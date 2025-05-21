@@ -109,7 +109,28 @@ async function loadMarkdownFilePromise(post) {
 		}
 	});
 
-	output += `---\n\n${post.content}\n`;
+	// Add coverImageDescription to frontmatter if it exists
+	if (post.coverImageDescription) {
+		const escapedValue = post.coverImageDescription.replace(/"/g, '\\"');
+		output += `coverImageDescription: "${escapedValue}"\n`;
+	}
+
+	output += `---\n\n`;
+	
+	// Process content to add image descriptions as alt text
+	let content = post.content;
+	
+	// Replace markdown image syntax with alt text from descriptions
+	// Format: ![](images/filename.jpg) -> ![Description](images/filename.jpg)
+	const imgRegex = /!\[\]\(images\/([^)]+)\)/g;
+	content = content.replace(imgRegex, (match, filename) => {
+		if (post.imageDescriptions && post.imageDescriptions[filename]) {
+			return `![${post.imageDescriptions[filename]}](images/${filename})`;
+		}
+		return match;
+	});
+	
+	output += `${content}\n`;
 	return output;
 }
 

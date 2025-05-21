@@ -9,6 +9,7 @@ Converts a WordPress export XML file into Markdown files. This makes it easy to 
 - Saves each post as a separate Markdown file with frontmatter.
 - Also saves drafts, pages, and custom post types, if you have any.
 - Downloads images and updates references to them.
+- Extracts image descriptions from WordPress and adds them as alt text in markdown.
 - User-friendly wizard guides you through the process.
 - Lots of command line options for configuration, if needed.
 

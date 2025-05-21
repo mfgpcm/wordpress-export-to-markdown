@@ -102,7 +102,11 @@ function buildPost(data) {
 
 		// these are possibly set later in mergeImagesIntoPosts()
 		coverImage: undefined,
-		imageUrls: []
+		coverImageDescription: undefined,
+		imageUrls: [],
+		
+		// store image descriptions by filename
+		imageDescriptions: {}
 	};
 }
 
@@ -124,11 +128,39 @@ function collectAttachedImages(allPostData) {
 			const url = attachment.childValue('attachment_url');
 			return url && (/\.(gif|jpe?g|png|webp)(\?|$)/i).test(url);
 		})
-		.map((attachment) => ({
-			id: attachment.childValue('post_id'),
-			postId: attachment.optionalChildValue('post_parent') ?? 'nope', // may not exist (cover image in a squarespace export, for example)
-			url: attachment.childValue('attachment_url')
-		}));
+		.map((attachment) => {
+			// Extract image description from content:encoded, excerpt:encoded, or title
+			let description = '';
+			
+			// Try to get description from content:encoded
+			const contentEncoded = attachment.optionalChildValue('encoded');
+			if (contentEncoded && contentEncoded.trim()) {
+				description = contentEncoded.trim();
+			}
+			
+			// If no description found, try excerpt:encoded
+			if (!description) {
+				const excerptEncoded = attachment.optionalChildValue('excerpt:encoded');
+				if (excerptEncoded && excerptEncoded.trim()) {
+					description = excerptEncoded.trim();
+				}
+			}
+			
+			// If still no description, try title
+			if (!description) {
+				const title = attachment.optionalChildValue('title');
+				if (title && title.trim()) {
+					description = title.trim();
+				}
+			}
+			
+			return {
+				id: attachment.childValue('post_id'),
+				postId: attachment.optionalChildValue('post_parent') ?? 'nope', // may not exist (cover image in a squarespace export, for example)
+				url: attachment.childValue('attachment_url'),
+				description: description
+			};
+		});
 
 	console.log(images.length + ' attached images found.');
 	return images;
@@ -141,8 +173,30 @@ function collectScrapedImages(allPostData, postTypes) {
 			const postId = postData.childValue('post_id');
 			
 			const postContent = postData.childValue('encoded');
-			const scrapedUrls = [...postContent.matchAll(/<img(?=\s)[^>]+?(?<=\s)src="(.+?)"[^>]*>/gi)].map((match) => match[1]);
-			scrapedUrls.forEach((scrapedUrl) => {
+			// Extract img tags with src, alt, and title attributes
+			const imgMatches = [...postContent.matchAll(/<img(?=\s)[^>]+?(?<=\s)src="(.+?)"[^>]*>/gi)];
+			
+			imgMatches.forEach((match) => {
+				const imgTag = match[0];
+				const scrapedUrl = match[1];
+				
+				// Extract alt and title attributes if they exist
+				let description = '';
+				
+				// Try to get alt attribute
+				const altMatch = imgTag.match(/alt="([^"]*)"/i);
+				if (altMatch && altMatch[1] && altMatch[1].trim()) {
+					description = altMatch[1].trim();
+				}
+				
+				// If no alt, try to get title attribute
+				if (!description) {
+					const titleMatch = imgTag.match(/title="([^"]*)"/i);
+					if (titleMatch && titleMatch[1] && titleMatch[1].trim()) {
+						description = titleMatch[1].trim();
+					}
+				}
+				
 				let url;
 				if (isAbsoluteUrl(scrapedUrl)) {
 					url = scrapedUrl;
@@ -158,7 +212,8 @@ function collectScrapedImages(allPostData, postTypes) {
 				images.push({
 					id: 'nope', // scraped images don't have an id
 					postId,
-					url
+					url,
+					description
 				});
 			});
 		});
@@ -182,10 +237,21 @@ function mergeImagesIntoPosts(images, posts) {
 			if (image.id === post.coverImageId) {
 				shouldAttach = true;
 				post.coverImage = shared.getFilenameFromUrl(image.url);
+				
+				// Store the description for the cover image
+				if (image.description) {
+					post.coverImageDescription = image.description;
+				}
 			}
 
 			if (shouldAttach && !post.imageUrls.includes(image.url)) {
 				post.imageUrls.push(image.url);
+				
+				// Store the description for this image
+				if (image.description) {
+					const filename = shared.getFilenameFromUrl(image.url);
+					post.imageDescriptions[filename] = image.description;
+				}
 			}
 		});
 	});
