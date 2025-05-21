@@ -24,6 +24,12 @@ export async function parseFilePromise() {
 	}
 
 	mergeImagesIntoPosts(images, posts);
+	
+	// Process post content to add image descriptions as alt text
+	posts.forEach(post => {
+		post.content = translator.processPostContent(post.content, post.imageDescriptions);
+	});
+	
 	populateFrontmatter(posts);
 
 	return posts;
