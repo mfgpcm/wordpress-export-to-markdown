@@ -139,3 +139,22 @@ export function getPostContent(content) {
 
 	return content;
 }
+
+// Process post content to add image descriptions as alt text in markdown
+export function processPostContent(content, imageDescriptions) {
+	if (!imageDescriptions || Object.keys(imageDescriptions).length === 0) {
+		return content;
+	}
+
+	// Replace image markdown syntax ![](image.jpg) with ![Description](image.jpg)
+	Object.keys(imageDescriptions).forEach(filename => {
+		const description = imageDescriptions[filename];
+		if (description) {
+			// Match image markdown syntax for this filename
+			const regex = new RegExp(`!\\[\\]\\(images\\/${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g');
+			content = content.replace(regex, `![${description}](images/${filename})`);
+		}
+	});
+
+	return content;
+}
