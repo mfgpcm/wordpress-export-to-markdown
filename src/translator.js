@@ -146,13 +146,13 @@ export function processPostContent(content, imageDescriptions) {
 		return content;
 	}
 
-	// Replace image markdown syntax ![](image.jpg) with ![Description](image.jpg)
+	// Replace image markdown syntax ![](image.jpg) with ![Description](image.jpg "Description")
 	Object.keys(imageDescriptions).forEach(filename => {
 		const description = imageDescriptions[filename];
 		if (description) {
 			// Match image markdown syntax for this filename
 			const regex = new RegExp(`!\\[\\]\\(images\\/${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g');
-			content = content.replace(regex, `![${description}](images/${filename})`);
+			content = content.replace(regex, `![${description}](images/${filename} "${description}")`);
 		}
 	});
 

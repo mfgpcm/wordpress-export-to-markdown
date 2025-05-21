@@ -117,8 +117,20 @@ async function loadMarkdownFilePromise(post) {
 
 	output += `---\n\n`;
 	
-	// Add the post content to the output
-	output += `${post.content}\n`;
+	// Process content to add image descriptions as alt text
+	let content = post.content;
+	
+	// Replace markdown image syntax with alt text from descriptions
+	// Format: ![](images/filename.jpg) -> ![Description](images/filename.jpg "Description")
+	const imgRegex = /!\[\]\(images\/([^)]+)\)/g;
+	content = content.replace(imgRegex, (match, filename) => {
+		if (post.imageDescriptions && post.imageDescriptions[filename]) {
+			return `![${post.imageDescriptions[filename]}](images/${filename} "${post.imageDescriptions[filename]}")`;
+		}
+		return match;
+	});
+	
+	output += `${content}\n`;
 	return output;
 }
 
