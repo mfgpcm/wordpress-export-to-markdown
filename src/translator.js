@@ -57,6 +57,8 @@ function initTurndownService() {
 			return before + html + '\n\n';
 		}
 	});
+	
+	// We're handling gallery shortcodes with HTML encoding/decoding instead of a custom rule
 
 	// iframe boolean attributes do not need to be set to empty string
 	turndownService.addRule('iframe', {
@@ -124,12 +126,27 @@ export function getPostContent(content) {
 	// by escaping angle brackets (will be unescaped during turndown conversion)
 	content = content.replace(/<(!--more( .*)?--)>/, '&lt;$1&gt;');
 
+	// preserve gallery shortcodes for later processing
+	content = content.replace(/\[gallery([^\]]+)?\]/g, (match) => {
+		// HTML-encode the brackets to prevent turndown from processing it
+		return `&lt;gallery-shortcode&gt;${encodeURIComponent(match)}&lt;/gallery-shortcode&gt;`;
+	});
+
 	// some WordPress plugins specify a code language in an HTML comment above a
 	// <pre> block, save it to a data attribute so the "pre" rule can use it
 	content = content.replace(/(<!-- wp:.+? \{"language":"(.+?)"\} -->\r?\n<pre )/g, '$1data-wetm-language="$2" ');
 
 	// use turndown to convert HTML to Markdown
 	content = turndownService.turndown(content);
+
+	// restore gallery shortcodes
+	content = content.replace(/<gallery-shortcode>([^<]+)<\/gallery-shortcode>/g, (match, encoded) => {
+		try {
+			return decodeURIComponent(encoded);
+		} catch (e) {
+			return match;
+		}
+	});
 
 	// clean up extra spaces in list items
 	content = content.replace(/(-|\d+\.) +/g, '$1 ');

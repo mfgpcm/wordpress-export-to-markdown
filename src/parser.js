@@ -23,6 +23,11 @@ export async function parseFilePromise() {
 		images.push(...collectScrapedImages(allPostData, postTypes));
 	}
 
+	// Process gallery shortcodes and collect gallery images
+	if (shared.config.saveImages === 'attached' || shared.config.saveImages === 'all') {
+		processGalleryShortcodes(posts, allPostData, images);
+	}
+
 	mergeImagesIntoPosts(images, posts);
 	
 	// Process post content to add image descriptions as alt text
@@ -289,4 +294,109 @@ function prioritizePostType(postTypes, postType) {
 
 function isAbsoluteUrl(url) {
 	return (/^https?:\/\//i).test(url);
+}
+
+function processGalleryShortcodes(posts, allPostData, images) {
+	console.log('Processing gallery shortcodes...');
+	let totalGalleries = 0;
+	let totalGalleryImages = 0;
+
+	// Create a map of image IDs to image objects for quick lookup
+	const imageMap = new Map();
+	const attachmentItems = getItemsOfType(allPostData, 'attachment');
+	
+	attachmentItems.forEach(attachment => {
+		const id = attachment.childValue('post_id');
+		const url = attachment.childValue('attachment_url');
+		
+		// Only include image files
+		if (url && (/\.(gif|jpe?g|png|webp)(\?|$)/i).test(url)) {
+			// Extract image description from content:encoded, excerpt:encoded, or title
+			let description = '';
+			
+			// Try to get description from content:encoded
+			const contentEncoded = attachment.optionalChildValue('encoded');
+			if (contentEncoded && contentEncoded.trim()) {
+				description = contentEncoded.trim();
+			}
+			
+			// If no description found, try excerpt:encoded
+			if (!description) {
+				const excerptEncoded = attachment.optionalChildValue('excerpt:encoded');
+				if (excerptEncoded && excerptEncoded.trim()) {
+					description = excerptEncoded.trim();
+				}
+			}
+			
+			// If still no description, try title
+			if (!description) {
+				const title = attachment.optionalChildValue('title');
+				if (title && title.trim()) {
+					description = title.trim();
+				}
+			}
+			
+			imageMap.set(id, {
+				id,
+				postId: attachment.optionalChildValue('post_parent') ?? 'nope',
+				url,
+				description
+			});
+		}
+	});
+
+	// Process each post for gallery shortcodes
+	posts.forEach(post => {
+		// Find all gallery shortcodes in the post content
+		const galleryRegex = /\[gallery([^\]]+)?\]/g;
+		let match;
+		let galleryCount = 0;
+		
+		// Create a new content string with gallery shortcodes replaced
+		let newContent = post.content;
+		
+		while ((match = galleryRegex.exec(post.content)) !== null) {
+			galleryCount++;
+			const galleryShortcode = match[0];
+			const galleryAttributes = match[1] || '';
+			
+			// Extract the ids attribute
+			const idsMatch = galleryAttributes.match(/ids="([^"]+)"/);
+			if (idsMatch && idsMatch[1]) {
+				const imageIds = idsMatch[1].split(',');
+				totalGalleryImages += imageIds.length;
+				
+				// Build markdown for gallery images
+				let markdownGallery = '\n\n';
+				
+				imageIds.forEach(imageId => {
+					const image = imageMap.get(imageId);
+					if (image) {
+						// Add this image to the images array if it's not already there
+						if (!images.some(img => img.id === imageId)) {
+							images.push(image);
+						}
+						
+						// Get the filename for the markdown
+						const filename = shared.getFilenameFromUrl(image.url);
+						
+						// Add markdown for this image
+						const description = image.description || '';
+						markdownGallery += `![${description}](images/${filename} "${description}")\n\n`;
+					}
+				});
+				
+				// Replace the gallery shortcode with the markdown gallery
+				newContent = newContent.replace(galleryShortcode, markdownGallery);
+			}
+		}
+		
+		// Update the post content if galleries were found
+		if (galleryCount > 0) {
+			post.content = newContent;
+			totalGalleries += galleryCount;
+		}
+	});
+	
+	console.log(`Processed ${totalGalleries} galleries with ${totalGalleryImages} images.`);
 }
