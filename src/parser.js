@@ -305,9 +305,13 @@ function processGalleryShortcodes(posts, allPostData, images) {
 	const imageMap = new Map();
 	const attachmentItems = getItemsOfType(allPostData, 'attachment');
 	
+	// Create a map of post IDs to their attached images
+	const postAttachmentsMap = new Map();
+	
 	attachmentItems.forEach(attachment => {
 		const id = attachment.childValue('post_id');
 		const url = attachment.childValue('attachment_url');
+		const postParent = attachment.optionalChildValue('post_parent') ?? 'nope';
 		
 		// Only include image files
 		if (url && (/\.(gif|jpe?g|png|webp)(\?|$)/i).test(url)) {
@@ -336,12 +340,23 @@ function processGalleryShortcodes(posts, allPostData, images) {
 				}
 			}
 			
-			imageMap.set(id, {
+			const imageObj = {
 				id,
-				postId: attachment.optionalChildValue('post_parent') ?? 'nope',
+				postId: postParent,
 				url,
 				description
-			});
+			};
+			
+			// Add to imageMap for ID-based lookup
+			imageMap.set(id, imageObj);
+			
+			// Add to postAttachmentsMap for parent-based lookup
+			if (postParent !== 'nope') {
+				if (!postAttachmentsMap.has(postParent)) {
+					postAttachmentsMap.set(postParent, []);
+				}
+				postAttachmentsMap.get(postParent).push(imageObj);
+			}
 		}
 	});
 
@@ -362,33 +377,45 @@ function processGalleryShortcodes(posts, allPostData, images) {
 			
 			// Extract the ids attribute
 			const idsMatch = galleryAttributes.match(/ids="([^"]+)"/);
+			let galleryImages = [];
+			
 			if (idsMatch && idsMatch[1]) {
+				// Case 1: Gallery with explicit IDs
 				const imageIds = idsMatch[1].split(',');
-				totalGalleryImages += imageIds.length;
-				
-				// Build markdown for gallery images
-				let markdownGallery = '\n\n';
 				
 				imageIds.forEach(imageId => {
 					const image = imageMap.get(imageId);
 					if (image) {
-						// Add this image to the images array if it's not already there
-						if (!images.some(img => img.id === imageId)) {
-							images.push(image);
-						}
-						
-						// Get the filename for the markdown
-						const filename = shared.getFilenameFromUrl(image.url);
-						
-						// Add markdown for this image
-						const description = image.description || '';
-						markdownGallery += `![${description}](images/${filename} "${description}")\n\n`;
+						galleryImages.push(image);
 					}
 				});
-				
-				// Replace the gallery shortcode with the markdown gallery
-				newContent = newContent.replace(galleryShortcode, markdownGallery);
+			} else {
+				// Case 2: Gallery without IDs - use all images attached to this post
+				const postAttachments = postAttachmentsMap.get(post.id) || [];
+				galleryImages = postAttachments;
 			}
+			
+			totalGalleryImages += galleryImages.length;
+			
+			// Build markdown for gallery images
+			let markdownGallery = '\n\n';
+			
+			galleryImages.forEach(image => {
+				// Add this image to the images array if it's not already there
+				if (!images.some(img => img.id === image.id)) {
+					images.push(image);
+				}
+				
+				// Get the filename for the markdown
+				const filename = shared.getFilenameFromUrl(image.url);
+				
+				// Add markdown for this image
+				const description = image.description || '';
+				markdownGallery += `![${description}](images/${filename} "${description}")\n\n`;
+			});
+			
+			// Replace the gallery shortcode with the markdown gallery
+			newContent = newContent.replace(galleryShortcode, markdownGallery);
 		}
 		
 		// Update the post content if galleries were found
